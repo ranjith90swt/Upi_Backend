@@ -312,12 +312,83 @@ export const saveBankDetails = async (req, res) => {
     }
 };
 
+export const getBankDetails = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Get merchant id
+        const [profile] = await db.query(
+            "SELECT id FROM merchant_profile WHERE user_id = ?",
+            [userId]
+        );
+
+        if (profile.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Merchant profile not found"
+            });
+        }
+
+        const merchantId = profile[0].id;
+
+        // Get bank details
+        const [bankData] = await db.query(
+            `SELECT 
+                account_holder_name,
+                account_number,
+                ifsc_code,
+                bank_name,
+                cancelled_cheque,
+                status
+             FROM merchant_bank_details
+             WHERE merchant_id = ?`,
+            [merchantId]
+        );
+
+        // If not found
+        if (bankData.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Bank details not found"
+            });
+        }
+
+        const data = bankData[0];
+
+        // Optional: Full file URL
+        const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+        data.cancelled_cheque = data.cancelled_cheque
+            ? baseUrl + data.cancelled_cheque
+            : null;
+
+        // Optional: Mask account number (security)
+        if (data.account_number) {
+            data.account_number =
+                "XXXXXX" + data.account_number.slice(-4);
+        }
+
+        // Response
+        res.json({
+            success: true,
+            data
+        });
+
+    } catch (error) {
+        console.error("GET BANK DETAILS ERROR:", error);
+        res.status(500).json({
+            success: false,
+            message: "Server error"
+        });
+    }
+};
+
 export const createVpa = async (req, res) => {
     try {
         const userId = req.user.id;
         const { vpa } = req.body;
 
-        // 1️⃣ Validate
+        // Validate
         if (!vpa) {
             return res.status(400).json({
                 message: "VPA is required"
@@ -331,7 +402,7 @@ export const createVpa = async (req, res) => {
             });
         }
 
-        // 2️⃣ Get merchant id
+        // Get merchant id
         const [profile] = await db.query(
             "SELECT id FROM merchant_profile WHERE user_id = ?",
             [userId]
@@ -345,7 +416,7 @@ export const createVpa = async (req, res) => {
 
         const merchantId = profile[0].id;
 
-        // 3️⃣ Check if VPA already exists
+        // Check if VPA already exists
         const [existing] = await db.query(
             "SELECT * FROM merchant_vpa WHERE vpa = ?",
             [vpa]
@@ -357,7 +428,7 @@ export const createVpa = async (req, res) => {
             });
         }
 
-        // 4️⃣ Insert / Update
+        // Insert / Update
         await db.query(
             `INSERT INTO merchant_vpa (merchant_id, vpa, status)
              VALUES (?, ?, 'completed')
@@ -377,6 +448,55 @@ export const createVpa = async (req, res) => {
     } catch (error) {
         console.error("VPA ERROR:", error);
         res.status(500).json({ message: "Server error" });
+    }
+};
+
+export const getVpa = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // Get merchant id
+        const [profile] = await db.query(
+            "SELECT id FROM merchant_profile WHERE user_id = ?",
+            [userId]
+        );
+
+        if (profile.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Merchant profile not found"
+            });
+        }
+
+        const merchantId = profile[0].id;
+
+        // Get VPA
+        const [vpaData] = await db.query(
+            `SELECT vpa, status
+             FROM merchant_vpa
+             WHERE merchant_id = ?`,
+            [merchantId]
+        );
+
+        if (vpaData.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "VPA not found"
+            });
+        }
+
+        // Direct response (no masking)
+        res.json({
+            success: true,
+            data: vpaData[0]
+        });
+
+    } catch (error) {
+        console.error("GET VPA ERROR:", error);
+        res.status(500).json({
+            success: false,
+            message: "Server error"
+        });
     }
 };
 

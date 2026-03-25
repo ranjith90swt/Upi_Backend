@@ -3,7 +3,7 @@ import { getPersonalKyc, savePersonalKycTab } from "../controllers/merchantKyc.c
 import { verifyToken } from "../middleware/verifyToken.js";
 import upload from "../middleware/upload.js";
 import { saveBusinessKyc, getBusinessKyc } from "../controllers/merchantKyc.controller.js";
-import { saveBankDetails, createVpa } from "../controllers/merchantKyc.controller.js";
+import { saveBankDetails, getBankDetails, createVpa, getVpa } from "../controllers/merchantKyc.controller.js";
 
 const router = express.Router();
 
@@ -47,6 +47,14 @@ router.post(
     upload.single("cancelled_cheque"),
     saveBankDetails
 );
+
+router.get(
+    "/bank-details",
+    verifyToken,
+    getBankDetails
+);
+
 router.post("/vpa", verifyToken, createVpa);
+router.get("/vpa", verifyToken, getVpa);
 
 export default router;
