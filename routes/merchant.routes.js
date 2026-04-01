@@ -23,7 +23,6 @@ router.get(
     getPersonalKyc
 );
 
-
 router.post(
     "/business-kyc",
     verifyToken,

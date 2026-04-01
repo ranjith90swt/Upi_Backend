@@ -23,38 +23,72 @@ export const savePersonalKycTab = async (req, res) => {
 
         const merchantId = profile[0].id;
 
-        // Get uploaded files
+        // Check if KYC already exists
+        const [existing] = await db.query(
+            "SELECT * FROM merchant_kyc WHERE merchant_id = ?",
+            [merchantId]
+        );
+
         const panFile = req.files?.pan_doc?.[0];
         const aadhaarFile = req.files?.aadhaar_doc?.[0];
 
-        if (!panFile || !aadhaarFile) {
-            return res.status(400).json({
-                message: "Both PAN and Aadhaar files are required"
-            });
+        // ============================
+        // CREATE CASE
+        // ============================
+        if (existing.length === 0) {
+            if (!panFile || !aadhaarFile) {
+                return res.status(400).json({
+                    message: "Both PAN and Aadhaar files are required"
+                });
+            }
+
+            const panPath = `/uploads/${panFile.filename}`;
+            const aadhaarPath = `/uploads/${aadhaarFile.filename}`;
+
+            await db.query(
+                `INSERT INTO merchant_kyc 
+                (merchant_id, business_entity_type, pan_doc, aadhaar_doc, status)
+                VALUES (?, ?, ?, ?, 'completed')`,
+                [merchantId, business_entity_type, panPath, aadhaarPath]
+            );
+
         }
+        // ============================
+        // UPDATE CASE
+        // ============================
+        else {
+            const updateFields = [];
+            const values = [];
 
-        const panPath = `/uploads/${panFile.filename}`;
-        const aadhaarPath = `/uploads/${aadhaarFile.filename}`;
+            // Always update entity type
+            updateFields.push("business_entity_type = ?");
+            values.push(business_entity_type);
 
-        // Insert or update
-        await db.query(
-            `INSERT INTO merchant_kyc 
-            (merchant_id, business_entity_type, pan_doc, aadhaar_doc, status)
-            VALUES (?, ?, ?, ?, 'completed')
-            ON DUPLICATE KEY UPDATE
-            business_entity_type = VALUES(business_entity_type),
-            pan_doc = VALUES(pan_doc),
-            aadhaar_doc = VALUES(aadhaar_doc),
-            status = 'completed'`,
-            [merchantId, business_entity_type, panPath, aadhaarPath]
-        );
+            if (panFile) {
+                updateFields.push("pan_doc = ?");
+                values.push(`/uploads/${panFile.filename}`);
+            }
+
+            if (aadhaarFile) {
+                updateFields.push("aadhaar_doc = ?");
+                values.push(`/uploads/${aadhaarFile.filename}`);
+            }
+
+            updateFields.push("status = 'completed'");
+
+            await db.query(
+                `UPDATE merchant_kyc SET ${updateFields.join(", ")} WHERE merchant_id = ?`,
+                [...values, merchantId]
+            );
+        }
 
         await checkAndSubmitMerchant(merchantId);
 
-
         res.json({
             success: true,
-            message: "Personal KYC uploaded successfully"
+            message: existing.length === 0
+                ? "Personal KYC Created Succesfully"
+                : "Personal KYC Updated Successfully"
         });
 
     } catch (err) {
